@@ -1,3 +1,7 @@
+Note: the `v3-built` branch is exactly like the v3 branch, but in which `npm
+install` was ran and with the output files checked in.  It is suitable to use
+directly as a dependency in a package.json.
+
 # [![xterm.js logo](logo.png)](https://xtermjs.org)
 
 [![xterm.js build status](https://api.travis-ci.org/sourcelair/xterm.js.svg)](https://travis-ci.org/sourcelair/xterm.js) [![Coverage Status](https://coveralls.io/repos/github/sourcelair/xterm.js/badge.svg)](https://coveralls.io/github/sourcelair/xterm.js) [![Gitter](https://badges.gitter.im/sourcelair/xterm.js.svg)](https://gitter.im/sourcelair/xterm.js?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
