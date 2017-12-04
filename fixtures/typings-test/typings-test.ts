@@ -41,6 +41,7 @@ namespace static_methods {
     Terminal.loadAddon('fullscreen');
     Terminal.loadAddon('search');
     Terminal.loadAddon('terminado');
+    Terminal.loadAddon('winptyCompat');
   }
 }
 
@@ -63,6 +64,7 @@ namespace methods_core {
     t.on('blur', () => {});
     t.on('focus', () => {});
     t.on('lineFeed', () => {});
+    t.on('selection', () => {});
     // args
     t.on('data', () => {});
     t.on('data', (data: string) => console.log(data));
@@ -88,6 +90,7 @@ namespace methods_core {
     t.off('blur', () => {});
     t.off('focus', () => {});
     t.off('lineFeed', () => {});
+    t.off('selection', () => {});
     // args
     t.off('data', () => {});
     t.off('data', (data: string) => console.log(data));
@@ -181,10 +184,10 @@ namespace methods_core {
   namespace scrolling {
     {
       const t: Terminal = new Terminal();
-      t.scrollDisp(-1);
-      t.scrollDisp(1);
-      t.scrollDisp(-1);
-      t.scrollDisp(1);
+      t.scrollLines(-1);
+      t.scrollLines(1);
+      t.scrollLines(-1);
+      t.scrollLines(1);
       t.scrollToTop();
       t.scrollToBottom();
     }

@@ -255,6 +255,7 @@ export class SelectionManager extends EventEmitter implements ISelectionManager 
   public selectAll(): void {
     this._model.isSelectAllActive = true;
     this.refresh();
+    this.emit('selection');
   }
 
   /**
@@ -273,7 +274,7 @@ export class SelectionManager extends EventEmitter implements ISelectionManager 
    * @param event The mouse event.
    */
   private _getMouseBufferCoords(event: MouseEvent): [number, number] {
-    const coords = this._terminal.mouseHelper.getCoords(event, this._terminal.element, this._charMeasure, this._terminal.options.lineHeight, this._terminal.cols, this._terminal.rows, true);
+    const coords = this._terminal.mouseHelper.getCoords(event, this._terminal.screenElement, this._charMeasure, this._terminal.options.lineHeight, this._terminal.cols, this._terminal.rows, true);
     if (!coords) {
       return null;
     }
@@ -293,7 +294,7 @@ export class SelectionManager extends EventEmitter implements ISelectionManager 
    * @param event The mouse event.
    */
   private _getMouseEventScrollAmount(event: MouseEvent): number {
-    let offset = MouseHelper.getCoordsRelativeToElement(event, this._terminal.element)[1];
+    let offset = MouseHelper.getCoordsRelativeToElement(event, this._terminal.screenElement)[1];
     const terminalHeight = this._terminal.rows * Math.ceil(this._charMeasure.height * this._terminal.options.lineHeight);
     if (offset >= 0 && offset <= terminalHeight) {
       return 0;
@@ -305,6 +306,15 @@ export class SelectionManager extends EventEmitter implements ISelectionManager 
     offset = Math.min(Math.max(offset, -DRAG_SCROLL_MAX_THRESHOLD), DRAG_SCROLL_MAX_THRESHOLD);
     offset /= DRAG_SCROLL_MAX_THRESHOLD;
     return (offset / Math.abs(offset)) + Math.round(offset * (DRAG_SCROLL_MAX_SPEED - 1));
+  }
+
+  /**
+   * Returns whether the selection manager should force selection, regardless of
+   * whether the terminal is in mouse events mode.
+   * @param event The mouse event.
+   */
+  public shouldForceSelection(event: MouseEvent): boolean {
+    return Browser.isMac ? event.altKey : event.shiftKey;
   }
 
   /**
@@ -325,9 +335,7 @@ export class SelectionManager extends EventEmitter implements ISelectionManager 
 
     // Allow selection when using a specific modifier key, even when disabled
     if (!this._enabled) {
-      const shouldForceSelection = Browser.isMac ? event.altKey : event.shiftKey;
-
-      if (!shouldForceSelection) {
+      if (!this.shouldForceSelection(event)) {
         return;
       }
 
@@ -488,7 +496,7 @@ export class SelectionManager extends EventEmitter implements ISelectionManager 
     // If the cursor was above or below the viewport, make sure it's at the
     // start or end of the viewport respectively.
     if (this._dragScrollAmount > 0) {
-      this._model.selectionEnd[0] = this._terminal.cols - 1;
+      this._model.selectionEnd[0] = this._terminal.cols;
     } else if (this._dragScrollAmount < 0) {
       this._model.selectionEnd[0] = 0;
     }
@@ -517,7 +525,7 @@ export class SelectionManager extends EventEmitter implements ISelectionManager 
    */
   private _dragScroll(): void {
     if (this._dragScrollAmount) {
-      this._terminal.scrollDisp(this._dragScrollAmount, false);
+      this._terminal.scrollLines(this._dragScrollAmount, false);
       // Re-evaluate selection
       if (this._dragScrollAmount > 0) {
         this._model.selectionEnd = [this._terminal.cols - 1, this._terminal.buffer.ydisp + this._terminal.rows];
@@ -534,6 +542,9 @@ export class SelectionManager extends EventEmitter implements ISelectionManager 
    */
   private _onMouseUp(event: MouseEvent): void {
     this._removeMouseDownListeners();
+
+    if (this.hasSelection)
+      this.emit('selection');
   }
 
   /**

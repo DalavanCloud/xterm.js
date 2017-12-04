@@ -22,7 +22,7 @@
  */
 
 import { BufferSet } from './BufferSet';
-import { Buffer } from './Buffer';
+import { Buffer, MAX_BUFFER_SIZE } from './Buffer';
 import { CompositionHelper } from './CompositionHelper';
 import { EventEmitter } from './EventEmitter';
 import { Viewport } from './Viewport';
@@ -97,6 +97,7 @@ const DEFAULT_OPTIONS: ITerminalOptions = {
 export class Terminal extends EventEmitter implements ITerminal, IInputHandlingTerminal {
   public textarea: HTMLTextAreaElement;
   public element: HTMLElement;
+  public screenElement: HTMLElement;
 
   /**
    * The HTMLElement that the terminal is created in, set by Terminal.open.
@@ -132,6 +133,7 @@ export class Terminal extends EventEmitter implements ITerminal, IInputHandlingT
   public originMode: boolean;
   public insertMode: boolean;
   public wraparoundMode: boolean; // defaults: xterm - true, vt100 - false
+  public bracketedPasteMode: boolean;
 
   // charset
   // The current charset
@@ -260,6 +262,7 @@ export class Terminal extends EventEmitter implements ITerminal, IInputHandlingT
     this.originMode = false;
     this.insertMode = false;
     this.wraparoundMode = true; // defaults: xterm - true, vt100 - false
+    this.bracketedPasteMode = false;
 
     // charset
     this.charset = null;
@@ -384,6 +387,8 @@ export class Terminal extends EventEmitter implements ITerminal, IInputHandlingT
         }
         break;
       case 'scrollback':
+        value = Math.min(value, MAX_BUFFER_SIZE);
+
         if (value < 0) {
           console.warn(`${key} cannot be less than 0, value: ${value}`);
           return;
@@ -584,6 +589,10 @@ export class Terminal extends EventEmitter implements ITerminal, IInputHandlingT
 
     this.element.setAttribute('tabindex', '0');
 
+    this.screenElement = document.createElement('div');
+    this.screenElement.classList.add('xterm-screen');
+    this.element.appendChild(this.screenElement);
+
     this.viewportElement = document.createElement('div');
     this.viewportElement.classList.add('xterm-viewport');
     this.element.appendChild(this.viewportElement);
@@ -728,7 +737,7 @@ export class Terminal extends EventEmitter implements ITerminal, IInputHandlingT
       button = getButton(ev);
 
       // get mouse coordinates
-      pos = self.mouseHelper.getRawByteCoords(ev, self.element, self.charMeasure, self.options.lineHeight, self.cols, self.rows);
+      pos = self.mouseHelper.getRawByteCoords(ev, self.screenElement, self.charMeasure, self.options.lineHeight, self.cols, self.rows);
       if (!pos) return;
 
       sendEvent(button, pos);
@@ -754,7 +763,7 @@ export class Terminal extends EventEmitter implements ITerminal, IInputHandlingT
     // ^[[M 3<^[[M@4<^[[M@5<^[[M@6<^[[M@7<^[[M#7<
     function sendMove(ev: MouseEvent): void {
       let button = pressed;
-      let pos = self.mouseHelper.getRawByteCoords(ev, self.element, self.charMeasure, self.options.lineHeight, self.cols, self.rows);
+      let pos = self.mouseHelper.getRawByteCoords(ev, self.screenElement, self.charMeasure, self.options.lineHeight, self.cols, self.rows);
       if (!pos) return;
 
       // buttons marked as motions
@@ -943,7 +952,12 @@ export class Terminal extends EventEmitter implements ITerminal, IInputHandlingT
       ev.preventDefault();
       this.focus();
 
-      if (!this.mouseEvents) return;
+      // Don't send the mouse button to the pty if mouse events are disabled or
+      // if the selection manager is having selection forced (ie. a modifier is
+      // held).
+      if (!this.mouseEvents || this.selectionManager.shouldForceSelection(ev)) {
+        return;
+      }
 
       // send the button
       sendButton(ev);
@@ -1119,11 +1133,11 @@ export class Terminal extends EventEmitter implements ITerminal, IInputHandlingT
   /**
    * Scroll the display of the terminal
    * @param {number} disp The number of lines to scroll down (negative scroll up).
-   * @param {boolean} suppressScrollEvent Don't emit the scroll event as scrollDisp. This is used
+   * @param {boolean} suppressScrollEvent Don't emit the scroll event as scrollLines. This is used
    * to avoid unwanted events being handled by the viewport when the event was triggered from the
    * viewport originally.
    */
-  public scrollDisp(disp: number, suppressScrollEvent?: boolean): void {
+  public scrollLines(disp: number, suppressScrollEvent?: boolean): void {
     if (disp < 0) {
       if (this.buffer.ydisp === 0) {
         return;
@@ -1153,21 +1167,21 @@ export class Terminal extends EventEmitter implements ITerminal, IInputHandlingT
    * @param {number} pageCount The number of pages to scroll (negative scrolls up).
    */
   public scrollPages(pageCount: number): void {
-    this.scrollDisp(pageCount * (this.rows - 1));
+    this.scrollLines(pageCount * (this.rows - 1));
   }
 
   /**
    * Scrolls the display of the terminal to the top.
    */
   public scrollToTop(): void {
-    this.scrollDisp(-this.buffer.ydisp);
+    this.scrollLines(-this.buffer.ydisp);
   }
 
   /**
    * Scrolls the display of the terminal to the bottom.
    */
   public scrollToBottom(): void {
-    this.scrollDisp(this.buffer.ybase - this.buffer.ydisp);
+    this.scrollLines(this.buffer.ybase - this.buffer.ydisp);
   }
 
   /**
@@ -1372,8 +1386,8 @@ export class Terminal extends EventEmitter implements ITerminal, IInputHandlingT
       this.writeStopped = false;
     }
 
-    if (result.scrollDisp) {
-      this.scrollDisp(result.scrollDisp);
+    if (result.scrollLines) {
+      this.scrollLines(result.scrollLines);
       return this.cancel(ev, true);
     }
 
@@ -1405,18 +1419,48 @@ export class Terminal extends EventEmitter implements ITerminal, IInputHandlingT
    * Reference: http://invisible-island.net/xterm/ctlseqs/ctlseqs.html
    * @param ev The keyboard event to be translated to key escape sequence.
    */
-  protected _evaluateKeyEscapeSequence(ev: KeyboardEvent): {cancel: boolean, key: string, scrollDisp: number} {
-    const result: {cancel: boolean, key: string, scrollDisp: number} = {
+  protected _evaluateKeyEscapeSequence(ev: KeyboardEvent): {cancel: boolean, key: string, scrollLines: number} {
+    const result: {cancel: boolean, key: string, scrollLines: number} = {
       // Whether to cancel event propogation (NOTE: this may not be needed since the event is
       // canceled at the end of keyDown
       cancel: false,
       // The new key even to emit
       key: undefined,
       // The number of characters to scroll, if this is defined it will cancel the event
-      scrollDisp: undefined
+      scrollLines: undefined
     };
     const modifiers = (ev.shiftKey ? 1 : 0) | (ev.altKey ? 2 : 0) | (ev.ctrlKey ? 4 : 0) | (ev.metaKey ? 8 : 0);
     switch (ev.keyCode) {
+      case 0:
+        if (ev.key === 'UIKeyInputUpArrow') {
+          if (this.applicationCursor) {
+            result.key = C0.ESC + 'OA';
+          } else {
+            result.key = C0.ESC + '[A';
+          }
+        }
+        else if (ev.key === 'UIKeyInputLeftArrow') {
+          if (this.applicationCursor) {
+            result.key = C0.ESC + 'OD';
+          } else {
+            result.key = C0.ESC + '[D';
+          }
+        }
+        else if (ev.key === 'UIKeyInputRightArrow') {
+          if (this.applicationCursor) {
+            result.key = C0.ESC + 'OC';
+          } else {
+            result.key = C0.ESC + '[C';
+          }
+        }
+        else if (ev.key === 'UIKeyInputDownArrow') {
+          if (this.applicationCursor) {
+            result.key = C0.ESC + 'OB';
+          } else {
+            result.key = C0.ESC + '[B';
+          }
+        }
+        break;
       case 8:
         // backspace
         if (ev.shiftKey) {
@@ -1543,7 +1587,7 @@ export class Terminal extends EventEmitter implements ITerminal, IInputHandlingT
       case 33:
         // page up
         if (ev.shiftKey) {
-          result.scrollDisp = -(this.rows - 1);
+          result.scrollLines = -(this.rows - 1);
         } else {
           result.key = C0.ESC + '[5~';
         }
@@ -1551,7 +1595,7 @@ export class Terminal extends EventEmitter implements ITerminal, IInputHandlingT
       case 34:
         // page down
         if (ev.shiftKey) {
-          result.scrollDisp = this.rows - 1;
+          result.scrollLines = this.rows - 1;
         } else {
           result.key = C0.ESC + '[6~';
         }

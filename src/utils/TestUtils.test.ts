@@ -10,12 +10,14 @@ import * as Browser from './Browser';
 import { IColorSet, IRenderer, IRenderDimensions, IColorManager } from '../renderer/Interfaces';
 
 export class MockTerminal implements ITerminal {
+  bracketedPasteMode: boolean;
   mouseHelper: IMouseHelper;
   renderer: IRenderer;
   linkifier: ILinkifier;
   isFocused: boolean;
   options: ITerminalOptions = {};
   element: HTMLElement;
+  screenElement: HTMLElement;
   rowContainer: HTMLElement;
   selectionContainer: HTMLElement;
   selectionManager: ISelectionManager;
@@ -32,6 +34,7 @@ export class MockTerminal implements ITerminal {
   scrollback: number;
   buffers: IBufferSet;
   buffer: IBuffer;
+  viewport: IViewport;
   handler(data: string): void {
     throw new Error('Method not implemented.');
   }
@@ -41,7 +44,7 @@ export class MockTerminal implements ITerminal {
   off(type: string, listener: IListenerType): void {
     throw new Error('Method not implemented.');
   }
-  scrollDisp(disp: number, suppressScrollEvent: boolean): void {
+  scrollLines(disp: number, suppressScrollEvent: boolean): void {
     throw new Error('Method not implemented.');
   }
   cancel(ev: Event, force?: boolean): void {
@@ -94,6 +97,7 @@ export class MockInputHandlingTerminal implements IInputHandlingTerminal {
   originMode: boolean;
   insertMode: boolean;
   wraparoundMode: boolean;
+  bracketedPasteMode: boolean;
   defAttr: number;
   curAttr: number;
   prefix: string;
@@ -242,6 +246,7 @@ export class MockRenderer implements IRenderer {
 }
 
 export class MockViewport implements IViewport {
+  scrollBarWidth: number = 0;
   onThemeChanged(colors: IColorSet): void {
     throw new Error('Method not implemented.');
   }

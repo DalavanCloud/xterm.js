@@ -33,6 +33,7 @@ export interface ILinkifierAccessor {
 }
 
 export interface ITerminal extends ILinkifierAccessor, IBufferAccessor, IElementAccessor, IEventEmitter {
+  screenElement: HTMLElement;
   selectionManager: ISelectionManager;
   charMeasure: ICharMeasure;
   textarea: HTMLTextAreaElement;
@@ -48,13 +49,15 @@ export interface ITerminal extends ILinkifierAccessor, IBufferAccessor, IElement
   buffers: IBufferSet;
   isFocused: boolean;
   mouseHelper: IMouseHelper;
+  viewport: IViewport;
+  bracketedPasteMode: boolean;
 
   /**
    * Emit the 'data' event and populate the given data.
    * @param data The data to populate in the event.
    */
   handler(data: string): void;
-  scrollDisp(disp: number, suppressScrollEvent?: boolean): void;
+  scrollLines(disp: number, suppressScrollEvent?: boolean): void;
   cancel(ev: Event, force?: boolean): boolean | void;
   log(text: string): void;
   reset(): void;
@@ -82,6 +85,7 @@ export interface IInputHandlingTerminal extends IEventEmitter {
   originMode: boolean;
   insertMode: boolean;
   wraparoundMode: boolean;
+  bracketedPasteMode: boolean;
   defAttr: number;
   curAttr: number;
   prefix: string;
@@ -183,6 +187,7 @@ export interface IMouseHelper {
 }
 
 export interface IViewport {
+  scrollBarWidth: number;
   syncScrollArea(): void;
   onWheel(ev: WheelEvent): void;
   onTouchStart(ev: TouchEvent): void;
