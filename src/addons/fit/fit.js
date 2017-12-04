@@ -46,7 +46,7 @@
     var availableHeight = parentElementHeight - elementPaddingVer;
     var availableWidth = parentElementWidth - elementPaddingHor;
     var geometry = {
-      cols: Math.floor(availableWidth / Math.floor(term.charMeasure.width),
+      cols: Math.floor(availableWidth / term.charMeasure.width),
       rows: Math.floor(availableHeight / Math.floor(term.charMeasure.height * term.getOption('lineHeight')))
     };
 
